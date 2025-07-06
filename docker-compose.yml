@@ -1,0 +1,40 @@
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: intelligent-document-query-app
+    ports:
+      - "8501:8501"
+    volumes:
+      # Mount volumes for persistence (optional)
+      - ./data:/app/data:ro # Read-only for source data
+      - chroma_data:/app/chroma_db # Named volume for ChromaDB
+      - temp_data:/app/temp # Named volume for temporary files
+    environment:
+      - STREAMLIT_BROWSER_GATHER_USAGE_STATS=false
+      - STREAMLIT_SERVER_HEADLESS=true
+      - STREAMLIT_SERVER_PORT=8501
+      - STREAMLIT_SERVER_ADDRESS=0.0.0.0
+      - PYTHONPATH=/app
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8501/_stcore/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+    # Resource limits (optional)
+    deploy:
+      resources:
+        limits:
+          memory: 2G
+        reservations:
+          memory: 1G
+    env_file: .env
+
+volumes:
+  chroma_data:
+    driver: local
+  temp_data:
+    driver: local

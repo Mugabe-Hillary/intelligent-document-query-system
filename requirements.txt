@@ -9,3 +9,6 @@ psutil
 langchain-google-genai
 langchain-chroma
 streamlit
+opentelemetry-api
+opentelemetry-sdk
+protobuf==3.20.3

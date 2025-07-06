@@ -67,6 +67,16 @@ logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 
+# --- Docker-compatible temporary directory setup ---
+def get_temp_dir() -> str:
+    """Get a temporary directory that works in Docker containers."""
+    # Use /app/temp in Docker, fall back to system temp
+    docker_temp = "/app/temp"
+    if os.path.exists(docker_temp) and os.access(docker_temp, os.W_OK):
+        return docker_temp
+    return tempfile.gettempdir()
+
+
 # --- Resource Management ---
 def cleanup_temp_resources() -> None:
     """Clean up temporary resources when switching documents."""
@@ -91,11 +101,11 @@ def cleanup_on_session_end() -> None:
 atexit.register(cleanup_on_session_end)
 
 
-# --- Caching the RAG Pipeline ---
+# --- Docker-compatible RAG Pipeline Loading ---
 @st.cache_resource
 def load_rag_pipeline() -> RAGPipeline:
     """
-    Loads and caches the RAG pipeline.
+    Loads and caches the RAG pipeline with Docker-compatible paths.
 
     Returns:
         RAGPipeline: Initialized pipeline instance
@@ -104,8 +114,19 @@ def load_rag_pipeline() -> RAGPipeline:
         RuntimeError: If pipeline initialization fails
     """
     try:
-        config = RAGConfig()
+        # Use Docker-compatible paths
+        db_path = Path("/app/chroma_db")
+        config = RAGConfig(db_persist_directory=db_path)
         pipeline = RAGPipeline(config=config)
+
+        # Check if we need to setup the default document
+        data_path = Path("/app/data/through_the_dark_continent.txt")
+        if data_path.exists():
+            logger.info(f"Setting up pipeline with default document: {data_path}")
+            pipeline.setup_pipeline(file_path=str(data_path))
+        else:
+            logger.warning(f"Default document not found at: {data_path}")
+
         logger.info("RAG Pipeline initialized successfully")
         return pipeline
     except Exception as e:
@@ -255,7 +276,7 @@ def validate_file_upload(uploaded_file) -> Tuple[bool, str]:
 # --- Enhanced File Upload Handler ---
 def handle_file_upload(uploaded_file) -> bool:
     """
-    Processes an uploaded file with proper resource management.
+    Processes an uploaded file with proper resource management and Docker compatibility.
 
     Args:
         uploaded_file: Streamlit uploaded file object
@@ -278,9 +299,13 @@ def handle_file_upload(uploaded_file) -> bool:
     if f"temp_dir_{uploaded_file.name}" in st.session_state:
         cleanup_temp_resources()
 
-    # Create session-specific temp directory
+    # Create session-specific temp directory using Docker-compatible path
     session_id = hash(uploaded_file.name + str(uploaded_file.size))
-    temp_dir = tempfile.mkdtemp(prefix=f"rag_session_{abs(session_id)}_")
+    temp_base = get_temp_dir()
+    temp_dir = os.path.join(temp_base, f"rag_session_{abs(session_id)}")
+
+    # Ensure temp directory exists
+    os.makedirs(temp_dir, exist_ok=True)
 
     try:
         spinner_text = UIConfig.MESSAGES["processing_spinner"].format(
