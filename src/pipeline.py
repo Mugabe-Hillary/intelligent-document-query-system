@@ -7,7 +7,7 @@ from langchain.prompts import PromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
 
-from core import (
+from src.core import (
     RAGConfig,
     RAGException,
     QueryError,

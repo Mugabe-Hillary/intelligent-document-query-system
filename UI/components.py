@@ -197,16 +197,16 @@ class UIComponents:
         return chat_md
 
     @st.cache_resource
-    def load_rag_pipeline(self) -> RAGPipeline:
+    def load_rag_pipeline(_self) -> RAGPipeline:
         """Load and cache the RAG pipeline with Docker-compatible paths."""
         try:
-            # Use Docker-compatible paths
-            db_path = Path(self.config.DOCKER_DB_PATH)
+            # Use environment-aware paths
+            db_path = Path(_self.config.get_db_path())
             config = RAGConfig(db_persist_directory=db_path)
             pipeline = RAGPipeline(config=config)
 
             # Check if we need to setup the default document
-            data_path = Path(self.config.DOCKER_DATA_PATH)
+            data_path = Path(_self.config.get_data_path())
             if data_path.exists():
                 logger.info(f"Setting up pipeline with default document: {data_path}")
                 pipeline.setup_pipeline(file_path=str(data_path))

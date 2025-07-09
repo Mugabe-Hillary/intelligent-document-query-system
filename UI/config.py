@@ -17,10 +17,13 @@ class UIConfig:
     MAX_FILE_SIZE_MB: int = 10
     CACHE_TTL: int = 300  # 5 minutes
 
-    # Docker paths
+    # Docker and local paths
     DOCKER_TEMP_DIR: str = "/app/temp"
     DOCKER_DB_PATH: str = "/app/chroma_db"
     DOCKER_DATA_PATH: str = "/app/data/through_the_dark_continent.txt"
+    LOCAL_TEMP_DIR: str = "temp"
+    LOCAL_DB_PATH: str = "chroma_db"
+    LOCAL_DATA_PATH: str = "data/through_the_dark_continent.txt"
 
     # UI Messages
     MESSAGES: Dict[str, str] = {
@@ -103,3 +106,36 @@ class UIConfig:
     def get_temp_dir_key(cls, filename: str) -> str:
         """Generate a temporary directory key for a filename."""
         return f"{cls.SESSION_KEYS['temp_dir_prefix']}{filename}"
+
+    @classmethod
+    def get_data_path(cls) -> str:
+        """Return the data path depending on environment (Docker or local)."""
+        import os
+        if os.path.exists(cls.DOCKER_DATA_PATH):
+            return cls.DOCKER_DATA_PATH
+        elif os.path.exists(cls.LOCAL_DATA_PATH):
+            return cls.LOCAL_DATA_PATH
+        else:
+            return cls.DOCKER_DATA_PATH  # Default to Docker path for error messages
+
+    @classmethod
+    def get_db_path(cls) -> str:
+        """Return the db path depending on environment (Docker or local)."""
+        import os
+        if os.path.exists(cls.DOCKER_DB_PATH):
+            return cls.DOCKER_DB_PATH
+        elif os.path.exists(cls.LOCAL_DB_PATH):
+            return cls.LOCAL_DB_PATH
+        else:
+            return cls.DOCKER_DB_PATH
+
+    @classmethod
+    def get_temp_dir(cls) -> str:
+        """Return the temp dir depending on environment (Docker or local)."""
+        import os
+        if os.path.exists(cls.DOCKER_TEMP_DIR):
+            return cls.DOCKER_TEMP_DIR
+        elif os.path.exists(cls.LOCAL_TEMP_DIR):
+            return cls.LOCAL_TEMP_DIR
+        else:
+            return cls.DOCKER_TEMP_DIR
