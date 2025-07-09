@@ -1,11 +1,11 @@
 import logging
 import os
+import time
 from contextlib import contextmanager
 from dataclasses import dataclass, field
 from pathlib import Path
 from typing import List, Optional, Protocol, Any
 from functools import lru_cache
-import time
 
 from langchain_community.document_loaders import TextLoader
 from langchain.schema import Document
@@ -16,13 +16,13 @@ from langchain_openai import ChatOpenAI
 from langchain.prompts import PromptTemplate
 from langchain.chains.combine_documents import create_stuff_documents_chain
 from langchain.chains import create_retrieval_chain
-from dotenv import load_dotenv
 from langchain_google_genai import ChatGoogleGenerativeAI
-
+from dotenv import load_dotenv
 
 load_dotenv()
 
 
+# ==================== EXCEPTIONS ====================
 class RAGException(Exception):
     """Base exception for RAG pipeline errors."""
 
@@ -47,7 +47,7 @@ class QueryError(RAGException):
     pass
 
 
-# Configuration management
+# ==================== CONFIGURATION ====================
 @dataclass
 class RAGConfig:
     """Configuration for the RAG pipeline."""
@@ -118,8 +118,6 @@ class RAGConfig:
             raise ValueError("chunk_overlap must be less than chunk_size")
         if self.k_retrieved_chunks <= 0:
             raise ValueError("k_retrieved_chunks must be positive")
-        if not self.openai_api_key:
-            raise ValueError("OPENAI_API_KEY environment variable is required")
 
         if "gemini" in self.llm_model.lower() and not self.google_api_key:
             raise ValueError(
@@ -156,7 +154,6 @@ def _get_config_value(key: str, default: Any) -> Any:
         else:
             return env_value
 
-    # Use default
     return default
 
 
@@ -176,7 +173,7 @@ def _get_config_path(key: str) -> Optional[Path]:
     return Path(env_value) if env_value else None
 
 
-# Logging setup
+# ==================== UTILITIES ====================
 def setup_logging(level: str = "INFO") -> logging.Logger:
     """Set up logging configuration."""
     logging.basicConfig(
@@ -187,7 +184,6 @@ def setup_logging(level: str = "INFO") -> logging.Logger:
     return logging.getLogger(__name__)
 
 
-# Input validation
 def validate_query(query: str) -> str:
     """Validate and sanitize query input."""
     if not query or not isinstance(query, str):
@@ -223,7 +219,7 @@ def validate_file_path(file_path: str) -> Path:
     return path
 
 
-# Document loading interface
+# ==================== DOCUMENT HANDLING ====================
 class DocumentLoader(Protocol):
     """Protocol for document loaders."""
 
@@ -257,7 +253,6 @@ class TextDocumentLoader:
             raise DocumentLoadError(f"Failed to load document: {e}") from e
 
 
-# Document processing
 class DocumentProcessor:
     """Handle document chunking and processing."""
 
@@ -301,7 +296,7 @@ class DocumentProcessor:
             raise DocumentLoadError(f"Failed to chunk documents: {e}") from e
 
 
-# Vector store management
+# ==================== VECTOR STORE ====================
 class VectorStoreManager:
     """Manage vector store operations."""
 
@@ -309,7 +304,6 @@ class VectorStoreManager:
         self.config = config
         self.logger = logger
         self._embeddings = None
-        self._vectordb = None
 
     @property
     def embeddings(self) -> HuggingFaceEmbeddings:
@@ -387,212 +381,53 @@ class VectorStoreManager:
             raise VectorStoreError(f"Failed to load vector store: {e}") from e
 
 
-# RAG query processor
-class RAGProcessor:
-    """Handle RAG query processing."""
+# ==================== LLM FACTORY ====================
+class LLMFactory:
+    """Factory for creating LLM instances."""
 
-    def __init__(self, config: RAGConfig, logger: logging.Logger):
-        self.config = config
-        self.logger = logger
-        self._llm = None
-        self._vector_store_manager = VectorStoreManager(config, logger)
-
-    @property
-    def llm(self) -> ChatOpenAI:
-        """Lazy initialization of LLM."""
-        if self._llm is None:
-            try:
-                self.logger.info(f"Initializing LLM: {self.config.llm_model}")
-
-                # --- FACTORY LOGIC ---
-                if "gemini" in self.config.llm_model.lower():
-                    self._llm = ChatGoogleGenerativeAI(
-                        model=self.config.llm_model,
-                        temperature=self.config.llm_temperature,
-                        google_api_key=self.config.google_api_key,
-                        # Gemini can be aggressive with safety settings
-                        convert_system_message_to_human=True,
-                    )
-                elif "gpt" in self.config.llm_model.lower():
-                    self._llm = ChatOpenAI(
-                        model_name=self.config.llm_model,
-                        temperature=self.config.llm_temperature,
-                        api_key=self.config.openai_api_key,
-                    )
-                else:
-                    raise RAGException(
-                        f"Unsupported LLM model specified: {self.config.llm_model}"
-                    )
-
-                self.logger.info("LLM initialized successfully")
-
-            except Exception as e:
-                self.logger.error(f"Failed to initialize LLM: {e}")
-                raise QueryError(f"Failed to initialize LLM: {e}") from e
-
-        return self._llm
-
-    def create_prompt_template(self) -> PromptTemplate:
-        """Create the prompt template for RAG."""
-        template = """
-        You are an AI assistant helping with questions about a document.
-        Answer the user's question based only on the following context.
-        If the answer is not found in the context, respond with "I cannot answer this question based on the provided document."
-        
-        Context:
-        {context}
-        
-        Question:
-        {input}
-        
-        Answer:
-        """
-
-        return PromptTemplate(template=template, input_variables=["context", "input"])
-
-    @lru_cache(maxsize=100)
-    def _cached_query(self, query: str) -> str:
-        """Cached query processing (for identical queries)."""
-        return self._process_query_uncached(query)
-
-    def _process_query_uncached(self, query: str) -> str:
-        """Process query without caching."""
-        try:
-            # Load vector store
-            vectordb = self._vector_store_manager.load_vector_store()
-
-            # Create retriever
-            retriever = vectordb.as_retriever(
-                search_kwargs={"k": self.config.k_retrieved_chunks}
+    @staticmethod
+    def create_llm(config: RAGConfig) -> ChatOpenAI:
+        """Create LLM instance based on configuration."""
+        if "gemini" in config.llm_model.lower():
+            return ChatGoogleGenerativeAI(
+                model=config.llm_model,
+                temperature=config.llm_temperature,
+                google_api_key=config.google_api_key,
+                convert_system_message_to_human=True,
             )
-
-            # Create chains
-            prompt = self.create_prompt_template()
-            question_answer_chain = create_stuff_documents_chain(self.llm, prompt)
-            rag_chain = create_retrieval_chain(retriever, question_answer_chain)
-
-            # Process query
-            self.logger.info(f"Processing query: '{query[:50]}...'")
-            start_time = time.time()
-
-            response = rag_chain.invoke({"input": query})
-
-            end_time = time.time()
-            self.logger.info(f"Query processed in {end_time - start_time:.2f} seconds")
-
-            return response["answer"]
-
-        except Exception as e:
-            self.logger.error(f"Failed to process query: {e}")
-            raise QueryError(f"Failed to process query: {e}") from e
-
-    def query(self, query: str, use_cache: bool = True) -> str:
-        """Process a query through the RAG pipeline."""
-        validated_query = validate_query(query)
-
-        if use_cache:
-            return self._cached_query(validated_query)
+        elif "gpt" in config.llm_model.lower():
+            return ChatOpenAI(
+                model_name=config.llm_model,
+                temperature=config.llm_temperature,
+                api_key=config.openai_api_key,
+            )
         else:
-            return self._process_query_uncached(validated_query)
+            raise RAGException(f"Unsupported LLM model specified: {config.llm_model}")
 
 
-# Main RAG pipeline orchestrator
-class RAGPipeline:
-    """Main RAG pipeline orchestrator."""
+# ==================== PERFORMANCE MONITORING ====================
+@contextmanager
+def performance_monitoring(logger: logging.Logger):
+    """Context manager for performance monitoring."""
+    start_time = time.time()
+    start_memory = _get_memory_usage()
 
-    def __init__(self, config: Optional[RAGConfig] = None):
-        self.config = config or RAGConfig()
-        self.logger = setup_logging()
+    try:
+        yield
+    finally:
+        end_time = time.time()
+        end_memory = _get_memory_usage()
 
-        # Initialize components
-        self.document_loader = TextDocumentLoader(self.logger)
-        self.document_processor = DocumentProcessor(self.config, self.logger)
-        self.vector_store_manager = VectorStoreManager(self.config, self.logger)
-        self.rag_processor = RAGProcessor(self.config, self.logger)
+        logger.info(f"Operation completed in {end_time - start_time:.2f} seconds")
+        logger.info(f"Memory usage: {end_memory - start_memory:.2f} MB")
 
-    def setup_pipeline(self, file_path: str) -> None:
-        """Set up the RAG pipeline with a document."""
-        try:
-            self.logger.info("Setting up RAG pipeline...")
 
-            # Validate and load document
-            validated_path = validate_file_path(file_path)
-            documents = self.document_loader.load(validated_path)
-
-            # Process documents
-            chunked_docs = self.document_processor.chunk_documents(documents)
-
-            # Create vector store
-            self.vector_store_manager.create_vector_store(chunked_docs)
-
-            self.logger.info("RAG pipeline setup completed successfully")
-
-        except Exception as e:
-            self.logger.error(f"Failed to setup RAG pipeline: {e}")
-            raise
-
-    def query(self, query: str, use_cache: bool = True) -> str:
-        """Query the RAG pipeline."""
-        try:
-            return self.rag_processor.query(query, use_cache)
-        except Exception as e:
-            self.logger.error(f"Query failed: {e}")
-            raise
-
-    @contextmanager
-    def performance_monitoring(self):
-        """Context manager for performance monitoring."""
-        start_time = time.time()
-        start_memory = self._get_memory_usage()
-
-        try:
-            yield
-        finally:
-            end_time = time.time()
-            end_memory = self._get_memory_usage()
-
-            self.logger.info(
-                f"Operation completed in {end_time - start_time:.2f} seconds"
-            )
-            self.logger.info(f"Memory usage: {end_memory - start_memory:.2f} MB")
-
-    def _get_memory_usage(self) -> float:
-        """Get current memory usage in MB."""
+def _get_memory_usage() -> float:
+    """Get current memory usage in MB."""
+    try:
         import psutil
 
         process = psutil.Process()
         return process.memory_info().rss / 1024 / 1024
-
-
-def main():
-    """Example usage of the refactored RAG pipeline."""
-    try:
-        pipeline = RAGPipeline()
-
-        if pipeline.config.source_document_path:
-            print(
-                f"Setting up pipeline with document: {pipeline.config.source_document_path}"
-            )
-            pipeline.setup_pipeline(str(pipeline.config.source_document_path))
-        else:
-            print(
-                "No SOURCE_DOCUMENT_PATH found in config. Please call setup_pipeline() manually."
-            )
-            print("Example: pipeline.setup_pipeline('path/to/your/document.txt')")
-            return
-
-        # Query the pipeline
-        with pipeline.performance_monitoring():
-            query = "What challenges did the expedition face with the natives?"
-            answer = pipeline.query(query)
-
-            print(f"\nQuery: {query}")
-            print(f"Answer: {answer}")
-
-    except Exception as e:
-        logging.error(f"Pipeline execution failed: {e}")
-        raise
-
-
-if __name__ == "__main__":
-    main()
+    except ImportError:
+        return 0.0  # Return 0 if psutil is not available
