@@ -1,4 +1,5 @@
 from typing import Dict, Any, List
+import os
 
 
 class UIConfig:
@@ -118,24 +119,13 @@ class UIConfig:
         else:
             return cls.DOCKER_DATA_PATH  # Default to Docker path for error messages
 
-    @classmethod
-    def get_db_path(cls) -> str:
-        """Return the db path depending on environment (Docker or local)."""
-        import os
-        if os.path.exists(cls.DOCKER_DB_PATH):
-            return cls.DOCKER_DB_PATH
-        elif os.path.exists(cls.LOCAL_DB_PATH):
-            return cls.LOCAL_DB_PATH
-        else:
-            return cls.DOCKER_DB_PATH
 
     @classmethod
-    def get_temp_dir(cls) -> str:
-        """Return the temp dir depending on environment (Docker or local)."""
-        import os
-        if os.path.exists(cls.DOCKER_TEMP_DIR):
-            return cls.DOCKER_TEMP_DIR
-        elif os.path.exists(cls.LOCAL_TEMP_DIR):
-            return cls.LOCAL_TEMP_DIR
+    def get_db_path(cls) -> str:
+        if os.path.exists(cls.LOCAL_DB_PATH):
+            return cls.LOCAL_DB_PATH
+        elif os.path.exists(cls.DOCKER_DB_PATH):
+            return cls.DOCKER_DB_PATH
         else:
-            return cls.DOCKER_TEMP_DIR
+            return cls.LOCAL_DB_PATH  # Default to local, not Docker
+

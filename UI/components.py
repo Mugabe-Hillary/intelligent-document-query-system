@@ -3,7 +3,7 @@ import logging
 from typing import Optional, List, Dict, Any
 from pathlib import Path
 
-from .config import UIConfig
+from UI.config import UIConfig
 from src.pipeline import RAGPipeline, RAGConfig
 
 logger = logging.getLogger(__name__)
@@ -196,32 +196,11 @@ class UIComponents:
             chat_md += f"{role}: {msg['content']}\n\n"
         return chat_md
 
-    @st.cache_resource
-    def load_rag_pipeline(_self) -> RAGPipeline:
-        """Load and cache the RAG pipeline with Docker-compatible paths."""
-        try:
-            # Use environment-aware paths
-            db_path = Path(_self.config.get_db_path())
-            config = RAGConfig(db_persist_directory=db_path)
-            pipeline = RAGPipeline(config=config)
-
-            # Check if we need to setup the default document
-            data_path = Path(_self.config.get_data_path())
-            if data_path.exists():
-                logger.info(f"Setting up pipeline with default document: {data_path}")
-                pipeline.setup_pipeline(file_path=str(data_path))
-            else:
-                logger.warning(f"Default document not found at: {data_path}")
-
-            logger.info("RAG Pipeline initialized successfully")
-            return pipeline
-        except Exception as e:
-            logger.error(f"Failed to initialize RAG Pipeline: {e}")
-            raise RuntimeError(f"Failed to initialize RAG Pipeline: {e}")
-
     def get_active_document_name(self) -> str:
         """Get the name of the currently active document."""
         active_doc_key = self.config.SESSION_KEYS["active_document"]
         if active_doc_key in st.session_state:
             return st.session_state[active_doc_key]
         return self.config.MESSAGES["default_doc"]
+
+

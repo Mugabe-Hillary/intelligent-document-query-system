@@ -1,7 +1,7 @@
 import logging
 from typing import Optional
 
-from UI import UIConfig, UIComponents, UIHandlers
+from UI import UIConfig, UIComponents, UIHandlers, pipeline_loader
 from src.pipeline import RAGPipeline
 
 # Configure logging
@@ -35,7 +35,8 @@ def main() -> None:
     handlers.process_sidebar_interactions(sidebar_state)
 
     # Get active pipeline
-    pipeline: Optional[RAGPipeline] = handlers.get_active_pipeline()
+    from pipeline_loader import load_rag_pipeline
+    pipeline = load_rag_pipeline()
     if pipeline is None:
         components.show_error(
             "❌ System initialization failed. Please refresh the page."
